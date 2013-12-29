@@ -1,0 +1,67 @@
+#!/usr/local/bin/python
+# 
+# Nagios check to ensure that the redhat satellite certificate is uptodate and current
+#
+# Written by Andy Zaugg
+# Date:  27/12/14
+#
+# TODO: Use smtplib for sending alert email
+
+import sys, xmlrpclib, datetime
+#--------------------------------------------------------------------------------
+# Globals #
+SATELLITE_URL = "http://satellite/rpc/api"
+SATELLITE_LOGIN = ""
+SATELLITE_PASSWORD = ""
+# Thresholds #
+WARNING_THRESHOLD = 14
+ERROR_THRESHOLD = 2
+# NAGIOS EXIT CODES #
+OK = 0
+ERROR = 1
+WARNING = 2
+UNKNOWN = 127
+# Alerting mechanisms #
+MAIL=""
+#--------------------------------------------------------------------------------
+def alert(**kwargs):
+	if kwargs['typ'] == "ERROR":
+		print "ERROR: Satellite certificate will expire in %d days" % kwargs['days']
+		sys.exit(ERROR)
+	elif kwargs['typ'] == "WARNING":
+		print "WARNING: Satellite certificate will expire in %d days" % kwargs['days']
+		sys.exit(WARNING)
+	else:
+		print "Somethig went wrong"
+		sys.exit(UNKNOWN)
+
+#--------------------------------------------------------------------------------
+def main():
+	# Establish connectio with Satellite
+	client = xmlrpclib.Server(SATELLITE_URL, verbose=0)
+	key = client.auth.login(SATELLITE_LOGIN, SATELLITE_PASSWORD)
+
+	# Determine certificate expiry date and do days ate
+	expire = str(client.satellite.getCertificateExpirationDate(key)).strip()
+	today = datetime.datetime.now().replace(microsecond=0).isoformat().replace('-','')
+
+	# Convert from string back into datetime
+	expire = datetime.datetime.strptime( expire, "%Y%m%dT%H:%M:%S" )
+	today = datetime.datetime.strptime( today, "%Y%m%dT%H:%M:%S" )
+
+	diff = (expire - today).days 
+
+	# Clos connection with Satelltie
+	client.auth.logout(key)
+
+	if diff <= ERROR_THRESHOLD:
+		alert(days = diff, typ = 'ERROR')
+	elif diff <= WARNING_THRESHOLD:
+		alert(days = diff, typ = 'WARNING')
+	else:
+		print "Everything is A'OK, %d days before certifcate expiry" % diff
+		sys.exit()
+#--------------------------------------------------------------------------------
+main()
+#EOF
+
