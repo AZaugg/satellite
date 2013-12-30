@@ -24,15 +24,15 @@ UNKNOWN = 127
 # Alerting mechanisms #
 MAIL=""
 #--------------------------------------------------------------------------------
-def alert(**kwargs):
-	if kwargs['typ'] == "ERROR":
-		print "ERROR: Satellite certificate will expire in %d days" % kwargs['days']
+def alert(typ, expiry_days):
+	if typ == "ERROR":
+		print "ERROR: Satellite certificate will expire in %d days" % expiry_days
 		sys.exit(ERROR)
-	elif kwargs['typ'] == "WARNING":
-		print "WARNING: Satellite certificate will expire in %d days" % kwargs['days']
+	elif typ == "WARNING":
+		print "WARNING: Satellite certificate will expire in %d days" % expiry_days
 		sys.exit(WARNING)
 	else:
-		print "Somethig went wrong"
+		print "Something went wrong"
 		sys.exit(UNKNOWN)
 
 #--------------------------------------------------------------------------------
@@ -55,9 +55,9 @@ def main():
 	client.auth.logout(key)
 
 	if diff <= ERROR_THRESHOLD:
-		alert(days = diff, typ = 'ERROR')
+		alert('ERROR', diff)
 	elif diff <= WARNING_THRESHOLD:
-		alert(days = diff, typ = 'WARNING')
+		alert('WARNING', diff)
 	else:
 		print "Everything is A'OK, %d days before certifcate expiry" % diff
 		sys.exit()
