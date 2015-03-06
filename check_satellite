@@ -1,0 +1,90 @@
+#!/usr/bin/env python
+'''
+Nagios check, to ensure redhat satellite is operational and
+in an OK state
+'''
+
+import os
+import sys
+import xmlrpclib
+
+SERVER = ""
+USERNAME = ""
+PASSWORD = ""
+#-------------------------------------------------------------------------
+# Nagios exit codes
+OK = 0
+WARNING = 1
+ERROR = 2
+UNKNOWN = 3
+#-------------------------------------------------------------------------
+class Satellite(object):
+    ''' Satelite connection object '''
+
+    def __init__(self, server=SERVER, user="", password=""):
+        self.server = server
+        self.user = user
+        self.password = password
+        self.connect()
+
+    def connect(self):
+        ''' Connect to satellite'''
+        self.client = xmlrpclib.Server(self.server)
+        self.key = self.client.auth.login(self.user, self.password)
+        self.system = self.client.system
+        self.channel = self.client.channel
+
+    def disconnect(self):
+        ''' Disconnect from satellite'''
+        self.client.auth.logout(self.key)
+
+#-------------------------------------------------------------------------
+def main():
+    ''' Look for issues with satellite,
+           - Database Running
+           - Webserver Running
+           - Databases have sufficient table space
+    '''
+    # Ensure that Oracle database is running
+    # Todo: Check for postgres database
+    db_status = os.popen("su - oracle -c '/usr/bin/db-control status'").readlines()[0].strip()
+    if "database is running and accepting" not in db_status.lower():
+        print "Oracle database not running"
+        sys.exit(ERROR)
+
+    # Ensure apache webserver is running
+    httpd_online = os.popen("ps -ef |grep '[h]ttp'").readlines()[0].strip()
+    if not httpd_online:
+        print "httpd is not running"
+        sys.exit(ERROR)
+
+    # Make a query against satellite
+    try:
+        rhn = Satellite(user=USERNAME, password=PASSWORD)
+    except:
+        print "Could not connect to satellite server: %s" % SERVER
+        sys.exit(ERROR)
+    if not rhn.channel.listAllChannels(rhn.key):
+        print "No data pulled from satellite server"
+        sys.exit(ERROR)
+
+    # Check Oracle database usage
+    dbreport = os.popen( \
+          "su - oracle -c '/usr/bin/db-control report | \
+          grep -v Tablespace | sort -rn -k5'" \
+          )
+    for line in dbreport:
+        percent = line.split()[4]
+        if int(percent.split("%")[0]) > 90:
+            db_name = line.split()[0]
+            if int(percent.split("%")[0]) > 95:
+                print "Database %s is %s used" % (db_name, percent)
+                sys.exit(ERROR)
+            print "Database %s is %s used" % (db_name, percent)
+            sys.exit(WARNING)
+    print "Satellite is up and running A'OK"
+    sys.exit(OK)
+
+#-------------------------------------------------------------------------
+if __name__ == "__main__":
+    main()
